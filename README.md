@@ -4,7 +4,7 @@
 
 The **Arma Review Engine** is designed for community owners to transform raw feedback into actionable insights. Currently in beta testing, it allows communities to upload Google Forms data (.xlsx) and instantly view clean, professional analytics.
 
-### 🚀 [Access the Live Dashboard](https://azenius.github.io/azo-review-engine/)
+### 🚀 [Access the Live Dashboard](https://andrew-ltu.github.io/azo-review-engine/)
 
 ---
 
