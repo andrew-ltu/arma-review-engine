@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import * as XLSX from 'xlsx';
+import { RAZR_OPS } from './razrData.js';
 
 const LOGO = "https://cdn.discordapp.com/attachments/719554714093617172/992416002992255056/Blue_logo2x.png?ex=6a012bad&is=69ffda2d&hm=832e3e89daf693d926475526d6a2822e4c3b5a4eda56b01e9cc2cd3f4a3a33c4&";
 
@@ -327,14 +328,13 @@ const FALLBACK_OPS = [
     "excluding the bug of falling though the ship, fantastic op really enjoyed it. awesome work.",
     "I give you good rating Mr Eamonn, only downrated for falling through ship issues, all objectives showing on map, and just some confusion between command and ground."
   ]},
-  { name:"RED WATER", creator:"Sir Danger", year:"24", month:"December", rating:7.75, responses:4, feedback:[
+  { name:"RED WATER", creator:"Sir Danger", year:"24", month:"December", rating:7.75, responses:4, feedback:[] },
+  { name:"EMERALD VEIL I", creator:"Jag McMuffin", year:"25", month:"March", rating:7.00, responses:2, feedback:[
+    "Was fun needed more ppl and a full brief w/ pre set cmdr",
     "no danger tonight but that's ok because jag is a mega sigma chat man",
     "Jag died very sad :(",
     "VERY EPIC we will die in the forest",
     "Simply cos of arma's ai it was a little funny, but the concept and the overall execution was pretty well done and enjoyable, just arma being arma cant do nothing about it"
-  ]},
-  { name:"EMERALD VEIL I", creator:"Sir Danger", year:"25", month:"March", rating:7.00, responses:2, feedback:[
-    "Was fun needed more ppl and a full brief w/ pre set cmdr"
   ]},
   { name:"EMERALD VEIL II", creator:"Jag McMuffin", year:"26", month:"May", rating:7.17, responses:12, feedback:[
     "Confusion, Too many Dead fr. But pretty good ngl.",
@@ -347,12 +347,28 @@ const FALLBACK_OPS = [
   ]},
 ];
 
+// ── COMBINED BASELINE (RAZR 2020-21 + AZO 2022-26) ───────────────────────────
+// Normalise "SirDanger" → "Sir Danger" so all ops roll up to one creator
+const BASELINE_OPS = [...RAZR_OPS, ...FALLBACK_OPS].map(op => {
+  if (op.creator === "SirDanger") return { ...op, creator: "Sir Danger" };
+  if (op.creator === "M1llsy")   return { ...op, creator: "Millsy" };
+  return op;
+});
+
 const CREATORS = {
-  "Jag McMuffin": { color: "#3B82F6", bg: "#1e3a5f", initials: "JM" },
-  "Sir Danger":   { color: "#F97316", bg: "#5c2c00", initials: "SD" },
+  "Sir Danger":   { color: "#3B82F6", bg: "#1e3a5f", initials: "SD", avatar: "https://cdn.discordapp.com/avatars/203678139220623361/3b8dd40e198bf944f349d117946add54.webp?size=80" },
+  "Jag McMuffin": { color: "#EF4444", bg: "#3d1a1a", initials: "JM", avatar: "https://cdn.discordapp.com/avatars/207012290401271818/6e039b62456ba5c2f219ef738ceaa786.webp?size=80" },
+  "Millsy":       { color: "#22C55E", bg: "#1a3d1a", initials: "ML" },
+  "Brickman":     { color: "#F59E0B", bg: "#3d2e0a", initials: "BK" },
   "Vain":         { color: "#A855F7", bg: "#3b1f5e", initials: "VN" },
-  "Bacon":        { color: "#22C55E", bg: "#1a3d1a", initials: "BC" },
+  "Bacon":        { color: "#EC4899", bg: "#3d1a2e", initials: "BC" },
+  "Screen":       { color: "#6B7280", bg: "#1a1f2e", initials: "SC" },
 };
+
+// Creators who are RAZR-era only (not Sir Danger or Jag who span both eras)
+const RAZR_ERA_CREATORS = ["Millsy", "Brickman", "Screen"];
+// Main leaderboard creators
+const MAIN_CREATORS = ["Sir Danger", "Jag McMuffin", "Vain", "Bacon"];
 
 function ratingColor(r) {
   if (r >= 9) return "#22C55E";
@@ -366,6 +382,23 @@ function RatingBar({ value }) {
 function RatingBadge({ value }) {
   return <span style={{ fontFamily:"monospace", fontSize:13, fontWeight:700, color:ratingColor(value), background:"rgba(0,0,0,0.4)", padding:"2px 8px", borderRadius:4, border:`1px solid ${ratingColor(value)}44` }}>{value.toFixed(2)}</span>;
 }
+function CreatorAvatar({ name, size = 36 }) {
+  const style = CREATORS[name];
+  if (!style) return null;
+  if (style.avatar) {
+    return (
+      <div style={{ width:size, height:size, borderRadius:"50%", border:`2px solid ${style.color}`, overflow:"hidden", flexShrink:0 }}>
+        <img src={style.avatar} alt={name} style={{ width:"100%", height:"100%", objectFit:"cover" }}
+          onError={e=>{ e.target.style.display="none"; e.target.parentNode.style.background=style.bg; e.target.parentNode.innerHTML=`<span style="font-size:${Math.floor(size*0.3)}px;font-weight:700;color:${style.color};display:flex;align-items:center;justify-content:center;width:100%;height:100%">${style.initials}</span>`; }}/>
+      </div>
+    );
+  }
+  return (
+    <div style={{ width:size, height:size, borderRadius:"50%", background:style.bg, border:`2px solid ${style.color}`, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:700, fontSize:Math.floor(size*0.3), color:style.color, flexShrink:0 }}>
+      {style.initials}
+    </div>
+  );
+}
 function creatorStats(name, ops) {
   const o = ops.filter(x => x.creator === name);
   const avg = o.reduce((s,x)=>s+x.rating,0)/o.length;
@@ -375,7 +408,7 @@ function creatorStats(name, ops) {
 // SheetJS from CDN — loaded via script tag in App
 
 // ── DASHBOARD ────────────────────────────────────────────────────────────────
-function DashboardView({ ops }) {
+function DashboardView({ ops, onSelectCreator, onSelectOp }) {
   const totalResponses = ops.reduce((s,o)=>s+o.responses,0);
   const overallAvg = (ops.reduce((s,o)=>s+o.rating,0)/ops.length).toFixed(2);
   const topOp = [...ops].sort((a,b)=>b.rating-a.rating)[0];
@@ -384,94 +417,174 @@ function DashboardView({ ops }) {
     const yo = ops.filter(o=>o.year===yr);
     return { year:`20${yr}`, avg:parseFloat((yo.reduce((s,o)=>s+o.rating,0)/yo.length).toFixed(2)), ops:yo.length };
   });
-  const recentOps = [...ops].slice(-6).reverse();
-  // Activity leaderboard — ops ranked by response volume
-  const activityRanked = [...ops].sort((a,b) => b.responses - a.responses);
-  const maxResponses = activityRanked[0]?.responses || 1;
+  const recentOps = [...ops].slice(-8).reverse();
+
+  // Per-creator trend line data — use all unique creators present in ops
+  const activeCreators = Object.entries(CREATORS).filter(([n])=>ops.some(o=>o.creator===n));
+  // Only show creators with ops across 3+ distinct years on the trend chart (forms a real line)
+  const trendCreators = activeCreators.filter(([name]) => {
+    const distinctYears = new Set(ops.filter(o=>o.creator===name).map(o=>o.year));
+    return distinctYears.size >= 3;
+  });
+  const creatorTrendData = years.map(yr => {
+    const row = { year:`20${yr}` };
+    trendCreators.forEach(([name]) => {
+      const yo = ops.filter(o=>o.year===yr && o.creator===name);
+      row[name] = yo.length > 0 ? parseFloat((yo.reduce((s,o)=>s+o.rating,0)/yo.length).toFixed(2)) : null;
+    });
+    return row;
+  });
 
   return (
     <div>
-      {/* Activity leaderboard */}
-      <div style={{ background:"#0d1e33", border:"1px solid #1e3a5f", borderRadius:8, padding:16, marginBottom:16 }}>
-        <div style={{ fontFamily:"monospace", fontSize:10, letterSpacing:"0.1em", color:"#5b7fa6", marginBottom:4 }}>🏟 ENGAGEMENT LEADERBOARD</div>
-        <div style={{ fontFamily:"sans-serif", fontSize:11, color:"#3d5a7a", marginBottom:14 }}>Ops ranked by volume of feedback responses</div>
-        {activityRanked.map((op, i) => {
-          const cs = CREATORS[op.creator];
-          const pct = (op.responses / maxResponses) * 100;
-          const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `#${i+1}`;
-          return (
-            <div key={op.name+op.year} style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
-              <div style={{ width:28, fontFamily:"monospace", fontSize:i<3?14:11, textAlign:"center", flexShrink:0 }}>{medal}</div>
-              <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ display:"flex", justifyContent:"space-between", marginBottom:3, alignItems:"center" }}>
-                  <span style={{ fontFamily:"sans-serif", fontWeight:700, fontSize:12, color:"#c8d8e8", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{op.name}</span>
-                  <div style={{ display:"flex", gap:8, flexShrink:0, marginLeft:8, alignItems:"center" }}>
-                    <span style={{ fontFamily:"monospace", fontSize:11, color:ratingColor(op.rating) }}>{op.rating.toFixed(2)}</span>
-                    <span style={{ fontFamily:"monospace", fontSize:12, fontWeight:700, color:"#F59E0B" }}>{op.responses}</span>
-                  </div>
-                </div>
-                <div style={{ position:"relative", height:5, background:"#1e2d42", borderRadius:3, overflow:"hidden" }}>
-                  <div style={{ position:"absolute", left:0, top:0, height:"100%", width:`${pct}%`, background: i===0?"#F59E0B": i===1?"#9CA3AF": i===2?"#B45309": cs?.color||"#3B82F6", borderRadius:3 }}/>
-                </div>
-                <div style={{ fontFamily:"sans-serif", fontSize:10, color:cs?.color||"#5b7fa6", marginTop:2 }}>{op.creator} · 20{op.year}</div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(150px, 1fr))", gap:12, marginBottom:24 }}>
-        {[{label:"TOTAL OPS",value:ops.length,sub:"all time"},{label:"OVERALL AVG",value:overallAvg,sub:"out of 10.00",color:ratingColor(parseFloat(overallAvg))},{label:"RESPONSES",value:totalResponses,sub:"total feedback"},{label:"TOP RATED",value:topOp?.rating.toFixed(2),sub:topOp?.name,color:"#22C55E"}].map(({label,value,sub,color})=>(
-          <div key={label} style={{ background:"#0d1e33", border:"1px solid #1e3a5f", borderRadius:8, padding:"16px 18px" }}>
-            <div style={{ fontFamily:"monospace", fontSize:10, letterSpacing:"0.12em", color:"#5b7fa6", marginBottom:4 }}>{label}</div>
-            <div style={{ fontFamily:"monospace", fontSize:26, fontWeight:700, color:color||"#e8edf2", lineHeight:1.1 }}>{value}</div>
-            <div style={{ fontFamily:"sans-serif", fontSize:11, color:"#4a6581", marginTop:4, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{sub}</div>
+      {/* ── STAT CARDS ── */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(3, 1fr)", gap:12, marginBottom:20 }}>
+        {[
+          { label:"TOTAL OPS",    value:ops.length,          sub:"all time" },
+          { label:"OVERALL AVG",  value:overallAvg,          sub:"out of 10.00", color:ratingColor(parseFloat(overallAvg)) },
+          { label:"RESPONSES",    value:totalResponses,      sub:"total feedback" },
+        ].map(({label,value,sub,color})=>(
+          <div key={label} style={{ background:"#0d1e33", border:"1px solid #1e3a5f", borderRadius:8, padding:"18px 20px" }}>
+            <div style={{ fontFamily:"monospace", fontSize:10, letterSpacing:"0.12em", color:"#5b7fa6", marginBottom:6 }}>{label}</div>
+            <div style={{ fontFamily:"monospace", fontSize:28, fontWeight:700, color:color||"#e8edf2", lineHeight:1.1 }}>{value}</div>
+            <div style={{ fontFamily:"sans-serif", fontSize:11, color:"#4a6581", marginTop:5, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{sub}</div>
           </div>
         ))}
       </div>
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:24 }}>
-        <div style={{ background:"#0d1e33", border:"1px solid #1e3a5f", borderRadius:8, padding:16 }}>
-          <div style={{ fontFamily:"monospace", fontSize:10, letterSpacing:"0.1em", color:"#5b7fa6", marginBottom:12 }}>AVG RATING BY YEAR</div>
-          <ResponsiveContainer width="100%" height={150}><LineChart data={yearData}><CartesianGrid strokeDasharray="3 3" stroke="#1a2d42"/><XAxis dataKey="year" tick={{fill:"#5b7fa6",fontSize:10,fontFamily:"monospace"}} axisLine={false} tickLine={false}/><YAxis domain={[5,10]} tick={{fill:"#5b7fa6",fontSize:10,fontFamily:"monospace"}} axisLine={false} tickLine={false} width={24}/><Tooltip contentStyle={{background:"#0a1628",border:"1px solid #1e3a5f",borderRadius:6,fontFamily:"monospace"}} itemStyle={{color:"#e8edf2"}} labelStyle={{color:"#5b7fa6"}}/><Line type="monotone" dataKey="avg" stroke="#3B82F6" strokeWidth={2} dot={{fill:"#3B82F6",r:3}}/></LineChart></ResponsiveContainer>
+
+      {/* ── CHARTS ROW ── */}
+      <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr", gap:16, marginBottom:20 }}>
+        {/* Creator trend over years */}
+        <div style={{ background:"#0d1e33", border:"1px solid #1e3a5f", borderRadius:8, padding:20 }}>
+          <div style={{ fontFamily:"monospace", fontSize:10, letterSpacing:"0.1em", color:"#5b7fa6", marginBottom:14 }}>CREATOR AVG RATING BY YEAR</div>
+          <ResponsiveContainer width="100%" height={200}>
+            <LineChart data={creatorTrendData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#1a2d42"/>
+              <XAxis dataKey="year" tick={{fill:"#5b7fa6",fontSize:10,fontFamily:"monospace"}} axisLine={false} tickLine={false}/>
+              <YAxis domain={[3,10]} tick={{fill:"#5b7fa6",fontSize:10,fontFamily:"monospace"}} axisLine={false} tickLine={false} width={24}/>
+              <Tooltip contentStyle={{background:"#0a1628",border:"1px solid #1e3a5f",borderRadius:6,fontFamily:"monospace"}} itemStyle={{fontSize:11}}/>
+              {trendCreators.map(([name,style])=>(
+                <Line key={name} type="monotone" dataKey={name} stroke={style.color} strokeWidth={2} dot={{fill:style.color,r:3}} connectNulls/>
+              ))}
+            </LineChart>
+          </ResponsiveContainer>
+          <div style={{ display:"flex", gap:14, flexWrap:"wrap", marginTop:10 }}>
+            {trendCreators.map(([name,style])=>(
+              <div key={name} style={{ display:"flex", alignItems:"center", gap:5 }}>
+                <div style={{ width:8, height:8, borderRadius:"50%", background:style.color }}/>
+                <span style={{ fontFamily:"sans-serif", fontSize:10, color:"#5b7fa6" }}>{name}</span>
+              </div>
+            ))}
+          </div>
         </div>
-        <div style={{ background:"#0d1e33", border:"1px solid #1e3a5f", borderRadius:8, padding:16 }}>
-          <div style={{ fontFamily:"monospace", fontSize:10, letterSpacing:"0.1em", color:"#5b7fa6", marginBottom:12 }}>OPS PER YEAR</div>
-          <ResponsiveContainer width="100%" height={150}><BarChart data={yearData}><CartesianGrid strokeDasharray="3 3" stroke="#1a2d42" vertical={false}/><XAxis dataKey="year" tick={{fill:"#5b7fa6",fontSize:10,fontFamily:"monospace"}} axisLine={false} tickLine={false}/><YAxis tick={{fill:"#5b7fa6",fontSize:10,fontFamily:"monospace"}} axisLine={false} tickLine={false} width={20}/><Tooltip contentStyle={{background:"#0a1628",border:"1px solid #1e3a5f",borderRadius:6,fontFamily:"monospace"}}/><Bar dataKey="ops" radius={[4,4,0,0]}>{yearData.map((_,i)=><Cell key={i} fill={["#3B82F6","#F97316","#A855F7","#22C55E","#F59E0B","#EF4444"][i%6]}/>)}</Bar></BarChart></ResponsiveContainer>
+
+        {/* Ops per year bar */}
+        <div style={{ background:"#0d1e33", border:"1px solid #1e3a5f", borderRadius:8, padding:20 }}>
+          <div style={{ fontFamily:"monospace", fontSize:10, letterSpacing:"0.1em", color:"#5b7fa6", marginBottom:14 }}>OPS PER YEAR</div>
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={yearData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#1a2d42" vertical={false}/>
+              <XAxis dataKey="year" tick={{fill:"#5b7fa6",fontSize:9,fontFamily:"monospace"}} axisLine={false} tickLine={false}/>
+              <YAxis tick={{fill:"#5b7fa6",fontSize:10,fontFamily:"monospace"}} axisLine={false} tickLine={false} width={20}/>
+              <Tooltip contentStyle={{background:"#0a1628",border:"1px solid #1e3a5f",borderRadius:6,fontFamily:"monospace"}}/>
+              <Bar dataKey="ops" radius={[4,4,0,0]}>
+                {yearData.map((_,i)=><Cell key={i} fill={["#3B82F6","#EF4444","#A855F7","#22C55E","#F59E0B","#EC4899","#F97316"][i%7]}/>)}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
         </div>
       </div>
-      <div style={{ background:"#0d1e33", border:"1px solid #1e3a5f", borderRadius:8, padding:16, marginBottom:24 }}>
-        <div style={{ fontFamily:"monospace", fontSize:10, letterSpacing:"0.1em", color:"#5b7fa6", marginBottom:14 }}>ZEUS COMMANDER LEADERBOARD</div>
-        {Object.entries(CREATORS).filter(([n])=>ops.some(o=>o.creator===n)).map(([name,style],i)=>{
-          const stats = creatorStats(name, ops);
-          return (
-            <div key={name} style={{ display:"flex", alignItems:"center", gap:12, marginBottom:i<Object.keys(CREATORS).length-1?14:0 }}>
-              <div style={{ width:20, fontFamily:"monospace", fontSize:11, color:"#3d5a7a", textAlign:"center" }}>#{i+1}</div>
-              <div style={{ width:34, height:34, borderRadius:"50%", background:style.bg, border:`2px solid ${style.color}`, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:700, fontSize:11, color:style.color, flexShrink:0 }}>{style.initials}</div>
+
+      {/* ── BOTTOM ROW: leaderboard + recent ops ── */}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
+        {/* Zeus leaderboard */}
+        <div style={{ background:"#0d1e33", border:"1px solid #1e3a5f", borderRadius:8, padding:20 }}>
+          <div style={{ fontFamily:"monospace", fontSize:10, letterSpacing:"0.1em", color:"#5b7fa6", marginBottom:16 }}>ZEUS COMMANDER LEADERBOARD</div>
+
+          {/* ── Main creators ── */}
+          {MAIN_CREATORS
+            .filter(n => ops.some(o => o.creator === n))
+            .map(n => ({ name:n, style:CREATORS[n], stats:creatorStats(n, ops) }))
+            .sort((a,b) => parseFloat(b.stats.avg) - parseFloat(a.stats.avg))
+            .map(({name,style,stats}, i) => (
+            <div key={name} onClick={()=>onSelectCreator(name)} style={{ display:"flex", alignItems:"center", gap:12, cursor:"pointer", borderRadius:6, padding:"6px 8px", margin:"0 -8px 8px", transition:"background 0.15s" }}
+              onMouseEnter={e=>e.currentTarget.style.background="#1e3a5f44"}
+              onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+              <div style={{ width:20, fontFamily:"monospace", fontSize:11, color:"#3d5a7a", textAlign:"center", flexShrink:0 }}>#{i+1}</div>
+              <CreatorAvatar name={name} size={36}/>
               <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ display:"flex", justifyContent:"space-between", marginBottom:3 }}>
+                <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
                   <span style={{ fontFamily:"sans-serif", fontWeight:700, fontSize:13, color:"#c8d8e8" }}>{name}</span>
                   <span style={{ fontFamily:"monospace", fontSize:12, fontWeight:700, color:ratingColor(parseFloat(stats.avg)) }}>{stats.avg}</span>
                 </div>
                 <RatingBar value={parseFloat(stats.avg)}/>
-                <div style={{ display:"flex", gap:10, marginTop:3 }}>
+                <div style={{ display:"flex", gap:10, marginTop:4 }}>
                   <span style={{ fontFamily:"sans-serif", fontSize:10, color:"#3d5a7a" }}>{stats.ops} ops</span>
                   <span style={{ fontFamily:"sans-serif", fontSize:10, color:"#3d5a7a" }}>{stats.totalResponses} responses</span>
+                  <span style={{ fontFamily:"sans-serif", fontSize:10, color:style.color, marginLeft:"auto" }}>view ops →</span>
                 </div>
               </div>
             </div>
-          );
-        })}
-      </div>
-      <div style={{ background:"#0d1e33", border:"1px solid #1e3a5f", borderRadius:8, padding:16 }}>
-        <div style={{ fontFamily:"monospace", fontSize:10, letterSpacing:"0.1em", color:"#5b7fa6", marginBottom:14 }}>RECENT OPERATIONS</div>
-        {recentOps.map(op=>(
-          <div key={op.name} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"8px 0", borderBottom:"1px solid #0e1f30" }}>
-            <div>
-              <div style={{ fontFamily:"sans-serif", fontWeight:700, fontSize:13, color:"#c8d8e8" }}>{op.name}</div>
-              <div style={{ fontFamily:"sans-serif", fontSize:11, color:CREATORS[op.creator]?.color||"#5b7fa6" }}>{op.creator} · 20{op.year}</div>
+          ))}
+
+          {/* ── RAZR Era divider ── */}
+          {RAZR_ERA_CREATORS.some(n => ops.some(o => o.creator === n)) && (
+            <>
+              <div style={{ display:"flex", alignItems:"center", gap:8, margin:"16px 0 14px" }}>
+                <div style={{ flex:1, height:1, background:"#1e3a5f" }}/>
+                <span style={{ fontFamily:"monospace", fontSize:9, letterSpacing:"0.12em", color:"#3d5a7a", whiteSpace:"nowrap" }}>RAZR ERA CREATORS</span>
+                <div style={{ flex:1, height:1, background:"#1e3a5f" }}/>
+              </div>
+              {RAZR_ERA_CREATORS
+                .filter(n => ops.some(o => o.creator === n))
+                .map(n => ({ name:n, style:CREATORS[n], stats:creatorStats(n, ops) }))
+                .sort((a,b) => parseFloat(b.stats.avg) - parseFloat(a.stats.avg))
+                .map(({name,style,stats}) => (
+                <div key={name} onClick={()=>onSelectCreator(name)} style={{ display:"flex", alignItems:"center", gap:12, marginBottom:12, opacity:0.8, cursor:"pointer", borderRadius:6, padding:"6px 8px", margin:"0 -8px 6px", transition:"background 0.15s" }}
+                  onMouseEnter={e=>e.currentTarget.style.background="#1e3a5f33"}
+                  onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                  <div style={{ width:20, flexShrink:0 }}/>
+                  <CreatorAvatar name={name} size={32}/>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+                      <span style={{ fontFamily:"sans-serif", fontWeight:700, fontSize:12, color:"#8a9ab0" }}>{name}</span>
+                      <span style={{ fontFamily:"monospace", fontSize:11, fontWeight:700, color:ratingColor(parseFloat(stats.avg)) }}>{stats.avg}</span>
+                    </div>
+                    <RatingBar value={parseFloat(stats.avg)}/>
+                    <div style={{ display:"flex", gap:10, marginTop:3 }}>
+                      <span style={{ fontFamily:"sans-serif", fontSize:10, color:"#3d5a7a" }}>{stats.ops} ops</span>
+                      <span style={{ fontFamily:"sans-serif", fontSize:10, color:"#3d5a7a" }}>{stats.totalResponses} responses</span>
+                      <span style={{ fontFamily:"sans-serif", fontSize:10, color:style.color, marginLeft:"auto" }}>view ops →</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+
+        {/* Recent ops */}
+        <div style={{ background:"#0d1e33", border:"1px solid #1e3a5f", borderRadius:8, padding:20 }}>
+          <div style={{ fontFamily:"monospace", fontSize:10, letterSpacing:"0.1em", color:"#5b7fa6", marginBottom:16 }}>RECENT OPERATIONS</div>
+          {recentOps.map((op,i)=>(
+            <div key={op.name+op.year} onClick={()=>onSelectOp(op)}
+              style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 8px", borderBottom: i < recentOps.length-1 ? "1px solid #0e1f30" : "none", cursor:"pointer", borderRadius:6, margin:"0 -8px", transition:"background 0.15s" }}
+              onMouseEnter={e=>e.currentTarget.style.background="#1e3a5f44"}
+              onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+              <div style={{ minWidth:0, flex:1, marginRight:12 }}>
+                <div style={{ fontFamily:"sans-serif", fontWeight:700, fontSize:13, color:"#c8d8e8", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{op.name}</div>
+                <div style={{ display:"flex", gap:8, alignItems:"center", marginTop:2 }}>
+                  <span style={{ fontFamily:"sans-serif", fontSize:11, color:CREATORS[op.creator]?.color||"#5b7fa6" }}>{op.creator} · 20{op.year}</span>
+                  {op.feedback?.length > 0 && <span style={{ fontFamily:"monospace", fontSize:9, color:"#3d5a7a" }}>{op.feedback.length} responses</span>}
+                </div>
+              </div>
+              <div style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0 }}>
+                <RatingBadge value={op.rating}/>
+                <span style={{ fontFamily:"monospace", fontSize:10, color:"#3d5a7a" }}>→</span>
+              </div>
             </div>
-            <RatingBadge value={op.rating}/>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -522,7 +635,7 @@ function OperationsView({ ops, onSelectOp }) {
               <RatingBadge value={op.rating}/>
             </div>
             <RatingBar value={op.rating}/>
-            {op.feedback?.length>0 && <div style={{ fontFamily:"sans-serif", fontSize:10, color:"#3d5a7a", marginTop:6 }}>"{op.feedback[0]}"</div>}
+            {op.feedback?.length>0 && <div style={{ fontFamily:"sans-serif", fontSize:10, color:"#3d5a7a", marginTop:6 }}></div>}
           </div>
         );
       })}
@@ -591,9 +704,9 @@ function FeedbackView({ ops, selectedOp: initOp }) {
 }
 
 // ── CREATORS VIEW ─────────────────────────────────────────────────────────────
-function CreatorsView({ ops }) {
+function CreatorsView({ ops, initialCreator }) {
   const activeCreators = Object.entries(CREATORS).filter(([n])=>ops.some(o=>o.creator===n));
-  const [selected, setSelected] = useState(activeCreators[0]?.[0]||"");
+  const [selected, setSelected] = useState(initialCreator || activeCreators[0]?.[0]||"");
   const stats = selected ? creatorStats(selected, ops) : null;
   const cs = CREATORS[selected];
   const chartData = stats?.allOps.map(o=>({ name:o.name.length>12?o.name.slice(0,12)+"…":o.name, rating:o.rating, fullName:o.name })) || [];
@@ -604,7 +717,7 @@ function CreatorsView({ ops }) {
           const st = creatorStats(name, ops);
           return (
             <button key={name} onClick={()=>setSelected(name)} style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 14px", borderRadius:8, border:selected===name?`1px solid ${style.color}`:"1px solid #1e3a5f", background:selected===name?style.bg:"transparent", cursor:"pointer" }}>
-              <div style={{ width:28, height:28, borderRadius:"50%", background:style.bg, border:`2px solid ${style.color}`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, fontWeight:700, color:style.color }}>{style.initials}</div>
+              <CreatorAvatar name={name} size={28}/>
               <div>
                 <div style={{ fontFamily:"sans-serif", fontWeight:700, fontSize:12, color:selected===name?style.color:"#c8d8e8" }}>{name}</div>
                 <div style={{ fontFamily:"monospace", fontSize:10, color:ratingColor(parseFloat(st.avg)) }}>{st.avg}</div>
@@ -682,53 +795,136 @@ function IntelView({ ops }) {
 
   async function runAnalysis() {
     setLoading(true); setErr(""); setAnalysis(null);
-    const filtered = selectedCreator==="ALL" ? allFeedback : allFeedback.filter(f=>f.creator===selectedCreator);
-    const recentFiltered = selectedCreator==="ALL" ? recentFeedback : recentFeedback.filter(f=>f.creator===selectedCreator);
 
-    const prompt = `You are an analyst for AZO (Australian Zeus Ops), an Arma 3 milsim group. Analyse the following op feedback and return ONLY valid JSON.
+    // ── Scope to selected creator ─────────────────────────────────────────────
+    const creatorOps = selectedCreator === "ALL"
+      ? ops
+      : ops.filter(o => o.creator === selectedCreator);
 
-ALL FEEDBACK (${filtered.length} items):
-${filtered.map(f=>`[${f.op} | ${f.creator} | ${f.rating}/10]: "${f.text}"`).join("\n")}
+    // All feedback items scoped to this creator's ops only
+    const filtered = creatorOps.flatMap(o =>
+      (o.feedback || []).map(f => ({ text: f, op: o.name, creator: o.creator, rating: o.rating, year: o.year, month: o.month }))
+    );
 
-RECENT FEEDBACK (last 12 months, ${recentFiltered.length} items):
-${recentFiltered.map(f=>`[${f.op} | ${f.creator} | ${f.rating}/10]: "${f.text}"`).join("\n")}
+    // "Recent" = last 5 ops this creator made (not a calendar window)
+    const recentCreatorOps = [...creatorOps].slice(-5);
+    const recentOpNames = new Set(recentCreatorOps.map(o => o.name));
+    const recentFiltered = filtered.filter(f => recentOpNames.has(f.op));
 
-Return ONLY this JSON structure, no markdown, no explanation:
-{
-  "strengths": [
-    { "title": "string", "description": "string (2 sentences)", "status": "consistent", "evidence": "string (specific example from feedback)", "opCount": number }
-  ],
-  "weaknesses": [
-    { "title": "string", "description": "string (2 sentences)", "status": "active|improving|resolved", "evidence": "string (specific example from feedback)", "opCount": number, "lastSeen": "string (op name)" }
-  ],
-  "summary": "string (3-4 sentences overall assessment)",
-  "trend": "improving|stable|declining",
-  "highlights": ["string","string","string"]
-}
+    // ── Negative sentiment words — disqualify a feedback item from being a strength match ──
+    const negativeWords = [
+      "didn't","didn't","not enough","no ","wasn't","wasn't","poor","bad ","terrible","awful",
+      "boring","confusing","annoying","frustrated","useless","broken","shit","crap","wtf",
+      "why did","why didn","too many","too much","too long","too short","need more","needs more",
+      "could have","should have","would have","wish","maybe","perhaps","suggest","improve",
+      "issue","problem","complaint","unfortunately","however","but ","except","although",
+      "lack of","lacking","missing","without","never","didn't work","didn't have",
+    ];
 
-Keep descriptions to 1 sentence max. Keep evidence quotes under 10 words. Identify exactly 5 strengths and 5 weaknesses. Be concise.`;
+    const isPositiveFeedback = (text) => {
+      const t = text.toLowerCase();
+      // Must not contain negative sentiment
+      if (negativeWords.some(w => t.includes(w))) return false;
+      // Must contain at least one positive signal
+      const positiveSignals = ["good","great","loved","amazing","fantastic","fun","enjoyed","brilliant","awesome","excellent","perfect","best","nice","cool","immersive","cinematic","well","smooth","clear","pog","epic"];
+      return positiveSignals.some(w => t.includes(w));
+    };
 
-    try {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({ model:"claude-sonnet-4-20250514", max_tokens:1000, messages:[{role:"user",content:prompt}] })
-      });
-      const data = await res.json();
-      const text = data.content?.filter(c=>c.type==="text").map(c=>c.text).join("") || "";
-      let clean = text.replace(/```json|```/g,"").trim();
-      // If JSON got truncated, attempt to close it safely
-      if (!clean.endsWith("}")) {
-        // Strip trailing incomplete entry and close arrays/object
-        clean = clean.replace(/,\s*$/, "");
-        clean = clean.replace(/,?\s*\{[^}]*$/, ""); // remove last incomplete object
-        const opens = (clean.match(/\[/g)||[]).length - (clean.match(/\]/g)||[]).length;
-        const braces = (clean.match(/\{/g)||[]).length - (clean.match(/\}/g)||[]).length;
-        clean += "]".repeat(Math.max(0,opens)) + "}".repeat(Math.max(0,braces));
+    // ── Keyword theme definitions ─────────────────────────────────────────────
+    const themes = [
+      { key:"immersion",    words:["immersive","cinematic","atmosphere","ambience","lore","voice acting","soundtrack","tension building","great music","loved the music","loved the atmosphere"], type:"strength" },
+      { key:"objectives",   words:["clear objective","objectives were clear","well planned","good layout","well made","well designed","great objectives","good objectives","objectives felt"], type:"strength" },
+      { key:"teamwork",     words:["great teamwork","good teamwork","teamwork was","coordination was","worked well together","squad worked","great squad","amazing squad","good squad cohesion"], type:"strength" },
+      { key:"enemy_design", words:["good amount of enemies","enemies were good","good ai","nice ambush","great ambush","good contact","enemies felt right","not too many enemies","good enemy"], type:"strength" },
+      { key:"fun",          words:["so fun","really fun","great fun","loved it","great op","fantastic op","amazing op","brilliant op","best op","loved the op","amazing work","excellent op"], type:"strength" },
+      { key:"lag",          words:["lag","fps drop","frame drop","desync","rubberbanding","server issue","low fps","bad frames","poor fps","terrible fps"], type:"weakness" },
+      { key:"comms",        words:["no orders","no brief","no briefing","didn't know what was going on","no objectives","poor communication","no comms","no radio","lack of communication","no clear"], type:"weakness" },
+      { key:"medics",       words:["no medic","not enough medic","medics were useless","medic left","no medical","under-equipped medic","medics weren't","medics didn't"], type:"weakness" },
+      { key:"tk",           words:["friendly fire","team kill","blue on blue","shot by friendly","tked","tk'd","friendly tk"], type:"weakness" },
+      { key:"pacing",       words:["too long","dragged out","too slow","too much waiting","nothing to do","ended too short","poor pacing","too dragged","very slow"], type:"weakness" },
+    ];
+
+    const themeLabels = {
+      immersion:    { title:"Strong Atmosphere & Immersion",    description:"Ops consistently praised for cinematic quality, music, and environmental storytelling." },
+      objectives:   { title:"Clear Mission Structure",          description:"Objectives are well-defined and mission layout is frequently praised." },
+      teamwork:     { title:"Squad Cohesion",                   description:"Good coordination and teamwork are a recurring highlight across ops." },
+      enemy_design: { title:"Balanced Enemy Encounters",        description:"Enemy numbers and placement are generally well-calibrated for the group size." },
+      fun:          { title:"High Enjoyment Factor",            description:"The majority of feedback across all ops expresses genuine enjoyment." },
+      lag:          { title:"Server Performance Issues",        description:"Frame drops and desync are a recurring complaint across multiple ops." },
+      comms:        { title:"Command Communication Gaps",       description:"Players frequently report confusion from unclear orders or missing briefings." },
+      medics:       { title:"Inadequate Medical Support",       description:"Medic shortages and under-equipped medics are a persistent issue." },
+      tk:           { title:"Friendly Fire Incidents",          description:"Team kills and blue-on-blue incidents appear across multiple ops." },
+      pacing:       { title:"Pacing Problems",                  description:"Ops sometimes run too long with dead time, or end abruptly before players feel satisfied." },
+    };
+
+    const results = {};
+    for (const theme of themes) {
+      let matches;
+      if (theme.type === "strength") {
+        // For strengths: only match feedback that is clearly positive
+        matches = filtered.filter(f =>
+          isPositiveFeedback(f.text) &&
+          theme.words.some(w => f.text.toLowerCase().includes(w))
+        );
+      } else {
+        // For weaknesses: match any feedback containing the complaint keyword
+        matches = filtered.filter(f =>
+          theme.words.some(w => f.text.toLowerCase().includes(w))
+        );
       }
-      const parsed = JSON.parse(clean);
-      setAnalysis(parsed);
-    } catch(e) { setErr("Analysis failed: "+e.message); }
+      if (matches.length === 0) continue;
+
+      const opNames = [...new Set(matches.map(f => f.op))];
+
+      // Best quote: shortest clearly positive/negative quote
+      const bestQuote = matches
+        .map(f => f.text.trim())
+        .filter(t => t.length > 15 && t.length < 110)
+        .sort((a, b) => a.length - b.length)[0] || matches[0]?.text.slice(0, 100);
+
+      const lastOp = opNames[opNames.length - 1];
+
+      const inRecent = recentFiltered.some(f => {
+        if (theme.type === "strength") {
+          return isPositiveFeedback(f.text) && theme.words.some(w => f.text.toLowerCase().includes(w));
+        }
+        return theme.words.some(w => f.text.toLowerCase().includes(w));
+      });
+
+      results[theme.key] = {
+        ...themeLabels[theme.key],
+        type: theme.type,
+        opCount: opNames.length,
+        evidence: bestQuote,
+        lastSeen: lastOp,
+        inRecent,
+      };
+    }
+
+    const strengths = Object.values(results).filter(r => r.type === "strength").slice(0, 5);
+    const rawWeaknesses = Object.values(results).filter(r => r.type === "weakness");
+
+    // Status: active = appeared in last 5 ops, resolved = hasn't appeared since
+    const taggedWeaknesses = rawWeaknesses.map(w => ({
+      ...w,
+      status: w.inRecent ? "active" : "resolved",
+    })).slice(0, 5);
+
+    // Overall trend: last 5 ops vs previous 5
+    const last5 = creatorOps.slice(-5);
+    const prev5 = creatorOps.slice(-10, -5);
+    const avgLast = last5.reduce((s, o) => s + o.rating, 0) / Math.max(last5.length, 1);
+    const avgPrev = prev5.reduce((s, o) => s + o.rating, 0) / Math.max(prev5.length, 1);
+    const trend = avgLast > avgPrev + 0.3 ? "improving" : avgLast < avgPrev - 0.3 ? "declining" : "stable";
+
+    const overallAvg = creatorOps.length
+      ? (creatorOps.reduce((s, o) => s + o.rating, 0) / creatorOps.length).toFixed(2)
+      : "N/A";
+
+    const lastOpName = creatorOps[creatorOps.length - 1]?.name || "";
+    const summary = `Analysis covers ${filtered.length} feedback responses across ${creatorOps.length} operations${selectedCreator !== "ALL" ? ` by ${selectedCreator}` : ""}. Overall average rating is ${overallAvg}/10. ${trend === "improving" ? "Recent ops show an upward trend." : trend === "declining" ? "Recent ops show a decline — attention needed." : "Ratings have been broadly stable."} ${taggedWeaknesses.filter(w => w.status === "active").length > 0 ? `${taggedWeaknesses.filter(w => w.status === "active").length} issue(s) still appearing in recent ops.` : "No recurring issues in the most recent ops."}`;
+
+    setAnalysis({ strengths, weaknesses: taggedWeaknesses, summary, trend, highlights: [] });
     setLoading(false);
   }
 
@@ -744,7 +940,7 @@ Keep descriptions to 1 sentence max. Keep evidence quotes under 10 words. Identi
       {/* Controls */}
       <div style={{ background:"#0d1e33", border:"1px solid #1e3a5f", borderRadius:8, padding:16, marginBottom:16 }}>
         <div style={{ fontFamily:"monospace", fontSize:10, letterSpacing:"0.1em", color:"#5b7fa6", marginBottom:10 }}>AI INTELLIGENCE ANALYSIS</div>
-        <p style={{ fontFamily:"sans-serif", fontSize:12, color:"#4a6581", marginBottom:14, lineHeight:1.5 }}>Claude scans all op feedback and surfaces patterns — strengths, weaknesses, and trends. Weaknesses are tagged as <span style={{color:"#EF4444"}}>Active</span>, <span style={{color:"#F59E0B"}}>Improving</span>, or <span style={{color:"#3B82F6"}}>Resolved</span> based on whether they appear in recent ops (last 12 months).</p>
+        <p style={{ fontFamily:"sans-serif", fontSize:12, color:"#4a6581", marginBottom:14, lineHeight:1.5 }}>Scans feedback for the selected creator and surfaces patterns. Weaknesses tagged <span style={{color:"#EF4444"}}>Active</span> still appeared in their last 5 ops. <span style={{color:"#3B82F6"}}>Resolved</span> means it hasn't shown up since. Evidence quotes are pulled only from that creator's ops.</p>
         <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>
           <select value={selectedCreator} onChange={e=>setSelectedCreator(e.target.value)} style={{ background:"#060f1e", border:"1px solid #1e3a5f", borderRadius:6, padding:"8px 10px", color:"#c8d8e8", fontFamily:"monospace", fontSize:11, outline:"none" }}>
             {activeCreators.map(c=><option key={c} value={c}>{c==="ALL"?"All Creators":c}</option>)}
@@ -790,6 +986,7 @@ Keep descriptions to 1 sentence max. Keep evidence quotes under 10 words. Identi
                     <span style={{ fontFamily:"monospace", fontSize:9, padding:"2px 8px", borderRadius:3, background:"#1a3d1a", color:"#22C55E", letterSpacing:"0.08em", flexShrink:0, marginLeft:8 }}>CONSISTENT</span>
                   </div>
                   <p style={{ fontFamily:"sans-serif", fontSize:12, color:"#8ab8a8", lineHeight:1.5, margin:0 }}>{s.description}</p>
+                  {s.evidence&&<div style={{ fontFamily:"sans-serif", fontSize:11, color:"#3d5a7a", borderLeft:"2px solid #22C55E44", paddingLeft:8, fontStyle:"italic", marginTop:8 }}>"{s.evidence}"</div>}
                   {s.opCount>0&&<div style={{ fontFamily:"monospace", fontSize:10, color:"#3d5a7a", marginTop:6 }}>Seen in ~{s.opCount} ops</div>}
                 </div>
               ))}
@@ -799,7 +996,6 @@ Keep descriptions to 1 sentence max. Keep evidence quotes under 10 words. Identi
               <div style={{ fontFamily:"monospace", fontSize:10, letterSpacing:"0.12em", color:"#EF4444", marginBottom:10 }}>◆ WEAKNESSES ({analysis.weaknesses?.length||0})</div>
               {analysis.weaknesses?.map((w,i)=>{
                 const sc = statusConfig[w.status] || statusConfig.active;
-                const quotes = (w.evidenceKeys||[]).map(k=>filteredFeedbackWithText[k]?.text).filter(t=>t&&t.trim()).slice(0,2);
                 return (
                   <div key={i} style={{ background:"#0d1e33", border:`1px solid ${sc.color}33`, borderRadius:8, padding:"12px 14px", marginBottom:8 }}>
                     <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:6 }}>
@@ -807,10 +1003,8 @@ Keep descriptions to 1 sentence max. Keep evidence quotes under 10 words. Identi
                       <span style={{ fontFamily:"monospace", fontSize:9, padding:"2px 8px", borderRadius:3, background:sc.bg, color:sc.color, letterSpacing:"0.08em", flexShrink:0, marginLeft:8 }}>{sc.label}</span>
                     </div>
                     <p style={{ fontFamily:"sans-serif", fontSize:12, color:"#8a9ab8", lineHeight:1.5, margin:"0 0 6px" }}>{w.description}</p>
-                    {quotes.map((q,qi)=>(
-                      <div key={qi} style={{ fontFamily:"sans-serif", fontSize:11, color:"#3d5a7a", borderLeft:`2px solid ${sc.color}44`, paddingLeft:8, fontStyle:"italic", marginBottom:4 }}>"{q.length>120?q.slice(0,120)+"…":q}"</div>
-                    ))}
-                    <div style={{ display:"flex", gap:12, marginTop:6 }}>
+                    {w.evidence&&<div style={{ fontFamily:"sans-serif", fontSize:11, color:"#3d5a7a", borderLeft:`2px solid ${sc.color}44`, paddingLeft:8, fontStyle:"italic", marginBottom:6 }}>"{w.evidence}"</div>}
+                    <div style={{ display:"flex", gap:12, marginTop:4 }}>
                       {w.opCount>0&&<span style={{ fontFamily:"monospace", fontSize:10, color:"#3d5a7a" }}>~{w.opCount} ops</span>}
                       {w.lastSeen&&<span style={{ fontFamily:"monospace", fontSize:10, color:"#3d5a7a" }}>Last: {w.lastSeen}</span>}
                     </div>
@@ -895,11 +1089,12 @@ function AnalyticsView({ ops }) {
 // ── APP SHELL ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [view, setView] = useState("dashboard");
-  const [ops, setOps] = useState(FALLBACK_OPS);
+  const [ops, setOps] = useState(BASELINE_OPS);
   const [fileName, setFileName] = useState(null);
   const [uploadErr, setUploadErr] = useState("");
   const [uploading, setUploading] = useState(false);
   const [feedbackOp, setFeedbackOp] = useState(null);
+  const [creatorTab, setCreatorTab] = useState(null);
   const fileRef = useRef(null);
 
   // Load SheetJS
@@ -916,10 +1111,23 @@ export default function App() {
     setUploading(true); setUploadErr("");
     try {
       if (!window.XLSX) throw new Error("SheetJS not loaded yet, try again in a moment");
-      const data = await parseXLSX(file);
-      if (!data.length) throw new Error("No valid ops found. Check your column headers.");
-      setOps(data);
-      setFileName(file.name);
+      const uploaded = await parseXLSX(file);
+      if (!uploaded.length) throw new Error("No valid ops found. Check your column headers.");
+      // Merge: uploaded ops override baseline entries with the same name+year, new ones are appended
+      const merged = [...BASELINE_OPS];
+      for (const up of uploaded) {
+        const idx = merged.findIndex(b => b.name.toLowerCase() === up.name.toLowerCase() && b.year === up.year);
+        if (idx >= 0) merged[idx] = up; // update existing
+        else merged.push(up);           // add new
+      }
+      merged.sort((a, b) => {
+        const ya = parseInt("20" + a.year), yb = parseInt("20" + b.year);
+        if (ya !== yb) return ya - yb;
+        const months = ["january","february","march","april","may","june","july","august","september","october","november","december"];
+        return months.indexOf((a.month||"").toLowerCase()) - months.indexOf((b.month||"").toLowerCase());
+      });
+      setOps(merged);
+      setFileName(`${file.name} (+${BASELINE_OPS.length} baseline ops)`);
     } catch(err) { setUploadErr(err.message); console.error("Upload error:", err); }
     setUploading(false);
     e.target.value = "";
@@ -956,9 +1164,9 @@ export default function App() {
       </div>
 
       {/* Nav */}
-      <div style={{ position:"sticky", top:50, zIndex:99, background:"#060f1e", borderBottom:"1px solid #0e1f30", padding:"0 8px", display:"flex", gap:0, overflowX:"auto" }}>
+      <div style={{ position:"sticky", top:50, zIndex:99, background:"#060f1e", borderBottom:"1px solid #0e1f30", display:"flex" }}>
         {VIEWS.map(v=>(
-          <button key={v.id} onClick={()=>setView(v.id)} style={{ padding:"9px 12px", border:"none", background:"none", cursor:"pointer", fontFamily:"monospace", fontWeight:700, fontSize:10, letterSpacing:"0.1em", color:view===v.id?"#3B82F6":"#3d5a7a", borderBottom:view===v.id?"2px solid #3B82F6":"2px solid transparent", whiteSpace:"nowrap" }}>
+          <button key={v.id} onClick={()=>setView(v.id)} style={{ flex:1, padding:"11px 8px", border:"none", background:"none", cursor:"pointer", fontFamily:"monospace", fontWeight:700, fontSize:11, letterSpacing:"0.08em", color:view===v.id?"#3B82F6":"#3d5a7a", borderBottom:view===v.id?"2px solid #3B82F6":"2px solid transparent", whiteSpace:"nowrap" }}>
             {v.icon} {v.label}
           </button>
         ))}
@@ -968,16 +1176,16 @@ export default function App() {
       <div style={{ background:"#060f1e", borderBottom:"1px solid #0e1f30", padding:"4px 16px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
         {fileName
           ? <span style={{ fontFamily:"monospace", fontSize:9, color:"#22C55E" }}>📊 {fileName} · {ops.length} ops loaded</span>
-          : <span style={{ fontFamily:"monospace", fontSize:9, color:"#4a6581" }}>📋 Demo data · Upload your XLSX to load real op data</span>
+          : <span style={{ fontFamily:"monospace", fontSize:9, color:"#4a6581" }}>📋 Baseline data ({BASELINE_OPS.length} ops, 2020–2026) · Upload XLSX to add/update ops</span>
         }
         {uploadErr && <span style={{ fontFamily:"monospace", fontSize:9, color:"#EF4444" }}>⚠ {uploadErr}</span>}
       </div>
 
-      <div style={{ padding:12, maxWidth:740, margin:"0 auto", paddingBottom:40 }}>
-        {view==="dashboard"&&<DashboardView ops={ops}/>}
+      <div style={{ padding:"20px 28px", paddingBottom:40 }}>
+        {view==="dashboard"&&<DashboardView ops={ops} onSelectCreator={name=>{ setCreatorTab(name); setView("creators"); }} onSelectOp={handleSelectOp}/>}
         {view==="ops"&&<OperationsView ops={ops} onSelectOp={handleSelectOp}/>}
         {view==="feedback"&&<FeedbackView ops={ops} selectedOp={feedbackOp}/>}
-        {view==="creators"&&<CreatorsView ops={ops}/>}
+        {view==="creators"&&<CreatorsView ops={ops} initialCreator={creatorTab}/>}
         {view==="intel"&&<IntelView ops={ops}/>}
         {view==="analytics"&&<AnalyticsView ops={ops}/>}
       </div>
